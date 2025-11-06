@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: rtuser
+      POSTGRES_PASSWORD: yoymtMzViTqH3gdNzQn0yxASFx9b
+      POSTGRES_DB: rt
+    volumes:
+      - rt-db-data:/var/lib/postgresql/data
+
+  rt:
+    build: .
+    depends_on:
+      - db
+    ports:
+      - "8080:80"
+    environment:
+      RT_DB_DSN: "dbi:Pg:dbname=rt;host=db"
+      RT_DB_USER: "rtuser"
+      RT_DB_PASS: "yoymtMzViTqH3gdNzQn0yxASFx9b"
+    volumes:
+      - rt-data:/opt/rt6/var
+      - ./RT_SiteConfig.pm:/opt/rt6/etc/RT_SiteConfig.pm:ro
+
+volumes:
+  rt-db-data:
+  rt-data:
