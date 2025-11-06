@@ -2,36 +2,49 @@ FROM debian:bookworm-slim
 
 # Instalează pachete necesare
 RUN apt-get update && apt-get install -y \
-    apache2 \
-    libapache2-mod-fcgid \
-    perl \
-    libdbd-pg-perl \
-    postgresql-client \
-    cron \
-    curl \
-    make \
-    gcc \
-    libdatetime-perl \
-    libencode-locale-perl \
-    libfile-which-perl \
-    libio-stringy-perl \
-    liblocale-codes-perl \
-    libmime-types-perl \
-    libregexp-common-perl \
-    libtext-iconv-perl \
-    libtext-template-perl \
-    liburi-perl \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+  build-essential \
+  curl \
+  libapache2-mod-fcgid \
+  apache2 \
+  libdbd-pg-perl \
+  libdatetime-perl \
+  libencode-locale-perl \
+  libfile-which-perl \
+  libio-stringy-perl \
+  liblocale-codes-perl \
+  libmime-types-perl \
+  libregexp-common-perl \
+  libtext-iconv-perl \
+  libtext-template-perl \
+  liburi-perl \
+  libjson-xs-perl \
+  libtext-csv-perl \
+  liblocale-maketext-lexicon-perl \
+  libemail-date-format-perl \
+  libemail-sender-perl \
+  libemail-mime-perl \
+  libemail-mime-modifier-perl \
+  libmime-tools-perl \
+  postgresql-client \
+  cron \
+  make \
+  gcc \
+  perl \
+  cpanminus \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/rt6
 
-# Descărcare RT (exemplu RT 6.0.0)
+# Descărcare RT (RT 6.0.2)
 RUN curl -L https://download.bestpractical.com/pub/rt/release/rt-6.0.2.tar.gz -o rt.tar.gz \
     && tar xzvf rt.tar.gz --strip-components=1 \
     && rm rt.tar.gz
 
-# Instalare RT
-RUN ./configure --with-web-user=www-data --with-web-group=www-data --with-db-type=Pg \
+# Instalare dependințe CPAN suplimentare (dacă e nevoie)
+RUN cpanm --notest DateTime Email::MIME JSON::XS Text::CSV
+
+# Configurare și testare dependințe
+RUN perl ./configure --with-web-user=www-data --with-web-group=www-data --with-db-type=Pg \
     && make testdeps \
     && make install
 
