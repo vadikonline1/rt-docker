@@ -27,6 +27,12 @@ WORKDIR /opt/rt6
 RUN curl -L https://download.bestpractical.com/pub/rt/release/rt-6.0.2.tar.gz -o rt.tar.gz \
     && tar xzvf rt.tar.gz --strip-components=1 \
     && rm rt.tar.gz \
+    && ./configure \
+        --with-web-user=www-data \
+        --with-web-group=www-data \
+        --with-db-type=Pg \
+        --prefix=/opt/rt6 \
+        --with-attachment-dir=/opt/rt6/var/attachments \
     && make dirs \
     && make fixdeps RT_FIX_DEPS_CMD="cpanm --notest --local-lib-contained=/opt/rt6/local" \
     && make install
