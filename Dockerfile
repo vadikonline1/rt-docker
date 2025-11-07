@@ -5,21 +5,30 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
     build-essential \
-    curl \
-    apache2 \
-    libapache2-mod-fcgid \
-    libdbd-pg-perl \
-    libwww-perl \
-    libcrypt-ssleay-perl \
-    libtext-template-perl \
-    postgresql-client \
-    make \
-    gcc \
     perl \
+    curl \
     cpanminus \
-    git \
-    cron \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    libssl-dev \
+    libexpat1-dev \
+    libgd-dev \
+    libpq-dev \
+    libgpg-error-dev \
+    libicu-dev \
+    zlib1g-dev \
+    libxml2-dev \
+    libpcre3-dev \
+    libyaml-dev \
+    libwww-perl \
+    libdbi-perl \
+    libdbd-pg-perl \
+    libtext-template-perl \
+    libmime-tools-perl \
+    libhtml-mason-perl \
+    libplack-perl \
+    libapache-session-perl \
+    libdatetime-perl \
+    && rm -rf /var/lib/apt/lists/*
+
 
 WORKDIR /opt/rt6
 
