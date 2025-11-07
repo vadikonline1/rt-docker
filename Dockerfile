@@ -1,59 +1,49 @@
-# Folosim Rocky Linux 9 ca bază
-FROM rockylinux:9
+FROM ubuntu:22.04
 
-# Setăm variabile de mediu
-ENV RT_VERSION=6.0.2
-ENV RT_PREFIX=/opt/rt6
-ENV RT_USER=rt
-ENV RT_GROUP=rt
-ENV PERL_LOCAL_LIB=$RT_PREFIX/local
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PERL_LOCAL_LIB_ROOT=/opt/rt6/local
+ENV PERL_MB_OPT="--install_base /opt/rt6/local"
+ENV PERL_MM_OPT="INSTALL_BASE=/opt/rt6/local"
+ENV PATH=/opt/rt6/local/bin:$PATH
 
-# Instalăm pachete de bază și dependințe Perl
-RUN dnf -y update && dnf install -y \
-    epel-release \
-    patch tar which gcc gcc-c++ make perl perl-App-cpanminus \
-    graphviz expat-devel gd-devel multiwatch openssl openssl-devel \
-    w3m curl bzip2 bzip2-devel xz-devel libuuid-devel \
-    postgresql-devel libicu-devel libxml2-devel zlib-devel \
-    sudo && \
-    dnf clean all
+# 1. Pre-requisites
+RUN apt-get update && apt-get install -y \
+    build-essential curl gcc g++ make \
+    perl perl-modules perl-dev cpanminus \
+    libapache2-mod-fcgid apache2 \
+    libdbd-pg-perl libdbi-perl \
+    libssl-dev libexpat1-dev libgd-dev \
+    patch tar graphviz w3m \
+    && rm -rf /var/lib/apt/lists/*
 
-# Dezactivare SELinux temporar
-RUN setenforce 0 || true
+# 2. RT 6.0.2
+WORKDIR /opt/rt6
+RUN curl -L https://download.bestpractical.com/pub/rt/release/rt-6.0.2.tar.gz -o rt.tar.gz \
+    && tar xzvf rt.tar.gz --strip-components=1 \
+    && rm rt.tar.gz
 
-# Creăm user și grup RT
-RUN groupadd --system $RT_GROUP && \
-    useradd --system --gid $RT_GROUP --home-dir $RT_PREFIX $RT_USER && \
-    mkdir -p $RT_PREFIX && \
-    chown -R $RT_USER:$RT_GROUP $RT_PREFIX
+# 3. Configure RT
+RUN ./configure \
+      --with-web-user=www-data \
+      --with-web-group=www-data \
+      --with-db-type=Pg \
+      --prefix=/opt/rt6 \
+      --with-attachment-dir=/opt/rt6/var/attachments \
+      --enable-graphviz \
+      --enable-gd
 
-WORKDIR $RT_PREFIX
+# 4. Make dirs, install Perl dependencies and RT
+RUN make dirs \
+    && make fixdeps RT_FIX_DEPS_CMD="cpanm --notest --local-lib-contained=/opt/rt6/local" \
+    && make install
 
-# Descărcăm și instalăm RT
-USER $RT_USER
-RUN curl -L https://download.bestpractical.com/pub/rt/release/rt-${RT_VERSION}.tar.gz -o rt.tar.gz && \
-    tar xzvf rt.tar.gz --strip-components=1 && \
-    rm rt.tar.gz && \
-    ./configure \
-        --prefix=$RT_PREFIX \
-        --with-db-type=Pg \
-        --with-web-user=$RT_USER \
-        --with-web-group=$RT_GROUP \
-        --with-attachment-store=disk \
-        --enable-externalauth \
-        --enable-gd \
-        --enable-graphviz \
-        --enable-gpg \
-        --enable-smime && \
-    make dirs && \
-    make fixdeps RT_FIX_DEPS_CMD="cpanm --notest --local-lib-contained=$PERL_LOCAL_LIB" && \
-    make install
+# 5. Copy RT_SiteConfig template
+COPY RT_SiteConfig.pm.template /opt/rt6/etc/RT_SiteConfig.pm.template
 
-# Setăm permisiuni
-RUN sudo make fixperms
+# 6. Inject .env values into RT_SiteConfig.pm at runtime
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-# Expunem portul 80 pentru RT
 EXPOSE 80
 
-# Comanda implicită
-CMD ["/opt/rt6/sbin/rt-server", "--port", "80"]
+ENTRYPOINT ["/entrypoint.sh"]
