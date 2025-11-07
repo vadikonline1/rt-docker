@@ -27,7 +27,7 @@ services:
       - "${RT_WEB_PORT}:${RT_WEB_PORT}"
     volumes:
       - ./RT_SiteConfig.pm:/opt/rt6/etc/RT_SiteConfig.pm
-      - ./env_file:.env
+      - ./.env:/opt/rt6/.env
 
 volumes:
   rt_pgdata:
