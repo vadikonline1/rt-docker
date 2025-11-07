@@ -4,24 +4,18 @@ set -e
 # Load .env
 export $(grep -v '^#' /env/.env | xargs)
 
-# Initialize PostgreSQL if not done
-if [ ! -f "/var/lib/pgsql/data/postgresql.conf" ]; then
-    postgresql-setup --initdb
-    systemctl enable postgresql
-    systemctl start postgresql
-fi
+# Start PostgreSQL in background
+sudo -u postgres pg_ctl -D /var/lib/pgsql/data -l /var/lib/pgsql/logfile start
 
-# Create DB users if not exists
-sudo -u postgres psql -c "CREATE USER ${RT_DB_ADMIN} WITH PASSWORD '${RT_DB_ADMIN_PASS}' CREATEDB CREATEROLE LOGIN;" || true
-sudo -u postgres psql -c "CREATE USER ${RT_DB_USER} WITH PASSWORD '${RT_DB_PASS}';" || true
-sudo -u postgres psql -c "CREATE DATABASE ${RT_DB_NAME} OWNER ${RT_DB_USER};" || true
+# Create DB users and database if not exists
+sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='${RT_DB_ADMIN}'" | grep -q 1 || \
+  sudo -u postgres psql -c "CREATE USER ${RT_DB_ADMIN} WITH PASSWORD '${RT_DB_ADMIN_PASS}' CREATEDB CREATEROLE LOGIN;"
+sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='${RT_DB_USER}'" | grep -q 1 || \
+  sudo -u postgres psql -c "CREATE USER ${RT_DB_USER} WITH PASSWORD '${RT_DB_PASS}';"
+sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw "${RT_DB_NAME}" || \
+  sudo -u postgres createdb -O ${RT_DB_USER} ${RT_DB_NAME}
 
-# Configure pg_hba.conf
-echo "host    ${RT_DB_NAME}   ${RT_DB_USER}   0.0.0.0/0   md5" >> /var/lib/pgsql/data/pg_hba.conf
-echo "host    ${RT_DB_NAME}   ${RT_DB_ADMIN}  0.0.0.0/0   md5" >> /var/lib/pgsql/data/pg_hba.conf
-systemctl reload postgresql
-
-# Generate RT configuration
+# Configure RT
 cat >/opt/rt6/etc/RT_SiteConfig.pm <<EOL
 Set(\$rtname, '${RT_ORG}');
 Set(\$Organization, '${RT_ORG}');
@@ -41,12 +35,12 @@ Set(%SMIME, 'Enable' => '0');
 1;
 EOL
 
-# Initialize RT DB
+# Initialize RT DB and fulltext index
 /opt/rt6/sbin/rt-setup-database --action init --prompt-for-database-password < /dev/null
 /opt/rt6/sbin/rt-setup-fulltext-index --noask
 
 # Fix permissions
 make -C /opt/rt6 fixperms
 
-# Start RT’s web server
+# Start Nginx in foreground
 exec /usr/sbin/nginx -g 'daemon off;'
