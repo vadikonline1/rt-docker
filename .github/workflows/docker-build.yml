@@ -1,4 +1,4 @@
-name: Build RT Docker
+name: Build and Push RT Docker
 
 on:
   push:
@@ -15,28 +15,39 @@ jobs:
       DOCKER_BUILDKIT: 1
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Load environment variables from .env
+        id: load_env
+        run: |
+          if [ ! -f .env ]; then
+            echo ".env file not found!"
+            exit 1
+          fi
+          export $(grep -v '^#' .env | xargs)
+          echo "RT_VERSION=$RT_VERSION" >> $GITHUB_ENV
+          echo "RT_DB_TYPE=$RT_DB_TYPE" >> $GITHUB_ENV
+          echo "Loaded RT_VERSION=$RT_VERSION and RT_DB_TYPE=$RT_DB_TYPE"
 
-    - name: Load .env
-      run: |
-        set -o allexport
-        source .env
-        set +o allexport
+      - name: Build Docker image
+        run: |
+          if [ -z "$RT_VERSION" ]; then
+            echo "RT_VERSION is not set. Exiting."
+            exit 1
+          fi
+          docker build \
+            --build-arg RT_VERSION=$RT_VERSION \
+            --build-arg RT_DB_TYPE=$RT_DB_TYPE \
+            -t myorg/rt6:$RT_VERSION .
 
-    - name: Build Docker image
-      run: |
-        docker build --build-arg RT_VERSION=$RT_VERSION \
-                     --build-arg RT_DB_TYPE=$RT_DB_TYPE \
-                     -t myorg/rt6:$RT_VERSION .
+      - name: Log in to Docker Hub
+        if: github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    - name: Push Docker image (optional)
-      if: github.ref == 'refs/heads/main'
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-    - run: docker push myorg/rt6:$RT_VERSION
+      - name: Push Docker image
+        if: github.ref == 'refs/heads/main'
+        run: docker push myorg/rt6:$RT_VERSION
