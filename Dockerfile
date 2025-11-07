@@ -1,36 +1,24 @@
 # Base image: Rocky Linux 9
 FROM rockylinux:9
 
-# Arguments
+# Arguments from build
 ARG RT_VERSION
 ARG RT_PREFIX
-ARG RT_WEB_USER
-ARG RT_WEB_GROUP
-ARG POSTGRES_USER
-ARG POSTGRES_PASSWORD
-ARG POSTGRES_DB
-ARG POSTGRES_HOST
 
 ENV RT_VERSION=${RT_VERSION}
 ENV RT_PREFIX=${RT_PREFIX}
-ENV RT_WEB_USER=${RT_WEB_USER}
-ENV RT_WEB_GROUP=${RT_WEB_GROUP}
-ENV POSTGRES_USER=${POSTGRES_USER}
-ENV POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-ENV POSTGRES_DB=${POSTGRES_DB}
-ENV POSTGRES_HOST=${POSTGRES_HOST}
 
 # Install dependencies
 RUN dnf -y update && dnf install -y \
     gcc gcc-c++ make autoconf patch tar curl \
     perl perl-core perl-App-cpanminus \
     libpq-devel \
-    libapache2-mod-fcgid httpd \
+    httpd mod_fcgid \
     gd-devel expat-devel openssl openssl-devel \
     graphviz w3m multiwatch gnupg \
     && dnf clean all
 
-# Create RT install dir
+# Create RT directories
 RUN mkdir -p ${RT_PREFIX}
 
 # Download and extract RT
@@ -44,19 +32,21 @@ WORKDIR /tmp/rt
 # Configure and install RT
 RUN ./configure \
         --prefix=${RT_PREFIX} \
-        --with-web-user=${RT_WEB_USER} \
-        --with-web-group=${RT_WEB_GROUP} \
+        --with-web-user=www-data \
+        --with-web-group=www-data \
         --with-db-type=Pg \
         --with-attachment-dir=${RT_PREFIX}/var/attachments \
     && make dirs \
     && make fixdeps RT_FIX_DEPS_CMD="cpanm --notest --local-lib-contained=${RT_PREFIX}/local" \
     && make install
 
-# Cleanup
-RUN rm -rf /tmp/rt
+# Copy SiteConfig
+COPY RT_SiteConfig.pm ${RT_PREFIX}/etc/RT_SiteConfig.pm
 
-# Expose RT port
+# Script to initialize DB on first run
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 EXPOSE ${RT_WEB_PORT}
 
-# Default command
-CMD ["sh", "-c", "${RT_PREFIX}/sbin/rt-server --port ${RT_WEB_PORT}"]
+ENTRYPOINT ["/entrypoint.sh"]
