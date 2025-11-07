@@ -1,29 +1,33 @@
+version: "3.9"
+
 services:
   db:
-    image: postgres:15
+    image: postgres:16
     environment:
-      POSTGRES_USER: rtuser
-      POSTGRES_PASSWORD: yoymtMzViTqH3gdNzQn0yxASFx9b
-      POSTGRES_DB: rt
+      POSTGRES_USER: ${RT_DB_ADMIN}
+      POSTGRES_PASSWORD: ${RT_DB_ADMIN_PASS}
+      POSTGRES_DB: ${RT_DB_NAME}
     volumes:
-      - rt-db-data:/var/lib/postgresql/data
-    restart: unless-stopped
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${RT_DB_ADMIN}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   rt:
     build: .
-    depends_on:
-      - db
+    env_file: .env
     ports:
       - "8080:80"
-    environment:
-      RT_DB_DSN: "dbi:Pg:dbname=rt;host=db"
-      RT_DB_USER: "rtuser"
-      RT_DB_PASS: "yoymtMzViTqH3gdNzQn0yxASFx9b"
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
-      - rt-data:/opt/rt6/var
-      - ./RT_SiteConfig.pm:/opt/rt6/etc/RT_SiteConfig.pm:ro
-    restart: unless-stopped
+      - rt_data:/opt/rt6/var
+      - logs:/var/log/apache2
 
 volumes:
-  rt-db-data:
-  rt-data:
+  db_data:
+  rt_data:
+  logs:
