@@ -38,7 +38,7 @@ RUN make dirs \
     && make install
 
 # 5. Copy RT_SiteConfig template
-COPY RT_SiteConfig.pm.template /opt/rt6/etc/RT_SiteConfig.pm.template
+COPY RT_SiteConfig.pm /opt/rt6/etc/RT_SiteConfig.pm
 
 # 6. Inject .env values into RT_SiteConfig.pm at runtime
 COPY entrypoint.sh /entrypoint.sh
