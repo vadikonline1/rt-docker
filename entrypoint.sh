@@ -1,18 +1,23 @@
 #!/bin/bash
 set -e
 
-# Load .env
+# Load env variables
 export $(grep -v '^#' /opt/rt6/.env | xargs)
 
-# Replace variables in template
-envsubst < /opt/rt6/etc/RT_SiteConfig.pm > /opt/rt6/etc/RT_SiteConfig.pm
+# Wait for Postgres to be ready
+until pg_isready -h $POSTGRES_HOST -U $POSTGRES_USER > /dev/null 2>&1; do
+  echo "Waiting for PostgreSQL..."
+  sleep 2
+done
 
-# Initialize database if needed
-if [ ! -f /opt/rt6/var/db_initialized ]; then
-    make initialize-database
-    touch /opt/rt6/var/db_initialized
+# Initialize database if not already done
+if [ ! -f "${RT_PREFIX}/var/db_initialized" ]; then
+    echo "Initializing RT database..."
+    ${RT_PREFIX}/sbin/rt-setup-database --action init --datadir ${RT_PREFIX}/var/attachments \
+        --dba $POSTGRES_USER --prompt-for-dba-password 0 \
+        --dbname $POSTGRES_DB --dbhost $POSTGRES_HOST --dbuser $POSTGRES_USER --dbpass $POSTGRES_PASSWORD
+    touch ${RT_PREFIX}/var/db_initialized
 fi
 
-# Start FastCGI RT server
-exec /opt/rt6/sbin/rt-server.fcgi -d
-
+# Start RT server
+exec ${RT_PREFIX}/sbin/rt-server --port $RT_WEB_PORT
