@@ -8,13 +8,14 @@ ENV PATH=/opt/rt6/local/bin:$PATH
 
 # 1. Pre-requisites
 RUN apt-get update && apt-get install -y \
-    build-essential curl gcc g++ make \
-    perl perl-modules perl-dev cpanminus \
-    libapache2-mod-fcgid apache2 \
+    build-essential gcc g++ make autoconf \
+    perl libperl-dev cpanminus \
+    apache2 libapache2-mod-fcgid \
     libdbd-pg-perl libdbi-perl \
-    libssl-dev libexpat1-dev libgd-dev \
-    patch tar graphviz w3m \
+    libssl-dev libexpat1-dev libgd-dev libz-dev \
+    patch tar graphviz w3m multiwatch openssl gnupg \
     && rm -rf /var/lib/apt/lists/*
+
 
 # 2. RT 6.0.2
 WORKDIR /opt/rt6
