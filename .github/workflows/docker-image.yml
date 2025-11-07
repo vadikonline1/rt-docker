@@ -4,42 +4,46 @@ on:
   push:
     branches:
       - main
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     env:
-      # Încarcă variabilele din fișierul .env (doar pentru workflow-ul acesta)
+      # Încarcă variabilele din .env
+      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+      RT_VERSION: ${{ secrets.RT_VERSION }}
+      RT_PREFIX: ${{ secrets.RT_PREFIX }}
+      RT_WEB_USER: ${{ secrets.RT_WEB_USER }}
+      RT_WEB_GROUP: ${{ secrets.RT_WEB_GROUP }}
       RT_WEB_PORT: ${{ secrets.RT_WEB_PORT }}
       RT_WEB_DOMAIN: ${{ secrets.RT_WEB_DOMAIN }}
       RT_ORGANIZATION: ${{ secrets.RT_ORGANIZATION }}
       RT_RTNAME: ${{ secrets.RT_RTNAME }}
-      POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
-      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-      POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      - name: Load .env variables
+        run: |
+          if [ -f .env ]; then
+            export $(grep -v '^#' .env | xargs)
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build RT Docker image
+      - name: Build Docker image
         run: |
           docker build \
-            --build-arg RT_WEB_PORT=${RT_WEB_PORT} \
-            --build-arg RT_WEB_DOMAIN=${RT_WEB_DOMAIN} \
-            --build-arg RT_ORGANIZATION=${RT_ORGANIZATION} \
-            --build-arg RT_RTNAME=${RT_RTNAME} \
-            --build-arg POSTGRES_HOST=${POSTGRES_HOST} \
-            --build-arg POSTGRES_USER=${POSTGRES_USER} \
-            --build-arg POSTGRES_PASSWORD=${POSTGRES_PASSWORD} \
-            --build-arg POSTGRES_DB=${POSTGRES_DB} \
-            -t rt6:latest .
+            --build-arg RT_VERSION=${RT_VERSION} \
+            --build-arg RT_PREFIX=${RT_PREFIX} \
+            --build-arg RT_WEB_USER=${RT_WEB_USER} \
+            --build-arg RT_WEB_GROUP=${RT_WEB_GROUP} \
+            -t rt6:${RT_VERSION} .
 
-      - name: List local Docker images
-        run: docker images
+      - name: Save Docker image as tar (optional)
+        run: docker save rt6:${RT_VERSION} -o rt6-${RT_VERSION}.tar
