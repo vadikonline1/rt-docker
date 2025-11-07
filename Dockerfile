@@ -1,49 +1,54 @@
-# Base image: Rocky Linux 9
+# Base image
 FROM rockylinux:9
 
-# Arguments from build
+# Set environment variables
 ARG RT_VERSION
-ARG RT_PREFIX
-
-ENV RT_VERSION=${RT_VERSION}
-ENV RT_PREFIX=${RT_PREFIX}
+ARG RT_DB_TYPE
+ENV RT_VERSION=${RT_VERSION} \
+    RT_DB_TYPE=${RT_DB_TYPE}
 
 # Install dependencies
-RUN dnf -y update && dnf install -y \
-    gcc gcc-c++ make autoconf patch tar curl \
-    perl perl-core perl-App-cpanminus \
-    libpq-devel \
-    httpd mod_fcgid \
-    gd-devel expat-devel openssl openssl-devel \
-    graphviz w3m multiwatch gnupg \
-    && dnf clean all
+RUN dnf -y install epel-release && \
+    dnf -y install patch tar which gcc gcc-c++ perl-core perl-App-cpanminus \
+    graphviz expat-devel gd-devel multiwatch openssl openssl-devel w3m \
+    nginx sudo && \
+    dnf clean all
 
-# Create RT directories
-RUN mkdir -p ${RT_PREFIX}
+# Disable SELinux
+RUN sed -i~ '/^SELINUX=/ c SELINUX=disabled' /etc/selinux/config && \
+    setenforce 0 || true
 
-# Download and extract RT
-RUN curl -L https://download.bestpractical.com/pub/rt/release/rt-${RT_VERSION}.tar.gz -o /tmp/rt.tar.gz \
-    && mkdir /tmp/rt \
-    && tar xzvf /tmp/rt.tar.gz --strip-components=1 -C /tmp/rt \
-    && rm /tmp/rt.tar.gz
+# Install PostgreSQL
+RUN dnf -y module enable postgresql:15 && \
+    dnf -y install postgresql-server postgresql-devel && \
+    postgresql-setup --initdb
 
-WORKDIR /tmp/rt
+# Add RT user/group
+RUN groupadd --system rt && \
+    useradd --system --home-dir=/opt/rt6/var --gid=rt rt
 
-# Configure and install RT
-RUN ./configure \
-        --prefix=${RT_PREFIX} \
-        --with-web-user=www-data \
-        --with-web-group=www-data \
-        --with-db-type=Pg \
-        --with-attachment-dir=${RT_PREFIX}/var/attachments \
-    && make dirs \
-    && make fixdeps RT_FIX_DEPS_CMD="cpanm --notest --local-lib-contained=${RT_PREFIX}/local" \
-    && make install
+# Download and build RT
+WORKDIR /tmp
+RUN curl -O https://download.bestpractical.com/pub/rt/release/rt-${RT_VERSION}.tar.gz && \
+    tar -xf rt-${RT_VERSION}.tar.gz && \
+    cd rt-${RT_VERSION} && \
+    PERL="/usr/bin/env -S perl -I/opt/rt6/local/lib/perl5" ./configure \
+        --prefix=/opt/rt6 \
+        --with-db-type=${RT_DB_TYPE} \
+        --with-web-user=rt \
+        --with-web-group=rt \
+        --with-attachment-store=disk \
+        --enable-externalauth \
+        --enable-gd \
+        --enable-graphviz \
+        --enable-gpg \
+        --enable-smime && \
+    make dirs && \
+    make fixdeps RT_FIX_DEPS_CMD="cpanm --sudo --local-lib-contained=/opt/rt6/local" && \
+    make install && \
+    cd /tmp && rm -rf rt-${RT_VERSION}*
 
-# Copy SiteConfig
-COPY RT_SiteConfig.pm ${RT_PREFIX}/etc/RT_SiteConfig.pm
-
-# Script to initialize DB on first run
+# Copy entrypoint
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
