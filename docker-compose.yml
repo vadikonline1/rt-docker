@@ -1,33 +1,33 @@
-version: "3.9"
-
 services:
   db:
-    image: postgres:16
+    image: postgres:15
+    container_name: rt-db
     environment:
-      POSTGRES_USER: ${RT_DB_ADMIN}
-      POSTGRES_PASSWORD: ${RT_DB_ADMIN_PASS}
-      POSTGRES_DB: ${RT_DB_NAME}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${RT_DB_ADMIN}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - rt_pgdata:/var/lib/postgresql/data
 
   rt:
     build: .
-    env_file: .env
-    ports:
-      - "8080:80"
+    container_name: rt6
     depends_on:
-      db:
-        condition: service_healthy
+      - db
+    environment:
+      RT_WEB_PORT: ${RT_WEB_PORT}
+      RT_WEB_DOMAIN: ${RT_WEB_DOMAIN}
+      RT_ORGANIZATION: ${RT_ORGANIZATION}
+      RT_RTNAME: ${RT_RTNAME}
+      POSTGRES_HOST: db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${RT_WEB_PORT}:${RT_WEB_PORT}"
     volumes:
-      - rt_data:/opt/rt6/var
-      - logs:/var/log/apache2
+      - ./RT_SiteConfig.pm.template:/opt/rt6/etc/RT_SiteConfig.pm.template
+      - ./env_file:.env
 
 volumes:
-  db_data:
-  rt_data:
-  logs:
+  rt_pgdata:
