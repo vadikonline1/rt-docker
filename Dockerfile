@@ -1,7 +1,7 @@
 # Base image
 FROM rockylinux:9
 
-# Set environment variables
+# Build args
 ARG RT_VERSION
 ARG RT_DB_TYPE
 ENV RT_VERSION=${RT_VERSION} \
@@ -12,20 +12,22 @@ RUN dnf -y install epel-release && \
     dnf -y install patch tar which gcc gcc-c++ perl-core perl-App-cpanminus \
     graphviz expat-devel gd-devel multiwatch openssl openssl-devel w3m \
     nginx sudo && \
+    dnf -y module enable postgresql:15 && \
+    dnf -y install postgresql-server postgresql-devel && \
     dnf clean all
 
 # Disable SELinux
 RUN sed -i~ '/^SELINUX=/ c SELINUX=disabled' /etc/selinux/config && \
     setenforce 0 || true
 
-# Install PostgreSQL
-RUN dnf -y module enable postgresql:15 && \
-    dnf -y install postgresql-server postgresql-devel && \
-    postgresql-setup --initdb
-
 # Add RT user/group
 RUN groupadd --system rt && \
     useradd --system --home-dir=/opt/rt6/var --gid=rt rt
+
+# Initialize PostgreSQL data directory
+RUN mkdir -p /var/lib/pgsql/data && \
+    chown -R postgres:postgres /var/lib/pgsql && \
+    sudo -u postgres /usr/bin/initdb -D /var/lib/pgsql/data
 
 # Download and build RT
 WORKDIR /tmp
