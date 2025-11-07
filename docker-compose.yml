@@ -28,6 +28,3 @@ services:
     volumes:
       - ./RT_SiteConfig.pm:/opt/rt6/etc/RT_SiteConfig.pm
       - ./.env:/opt/rt6/.env
-
-volumes:
-  rt_pgdata:
