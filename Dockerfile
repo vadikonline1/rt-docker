@@ -1,50 +1,55 @@
+# Use official Ubuntu as base
 FROM ubuntu:22.04
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PERL_LOCAL_LIB_ROOT=/opt/rt6/local
-ENV PERL_MB_OPT="--install_base /opt/rt6/local"
-ENV PERL_MM_OPT="INSTALL_BASE=/opt/rt6/local"
-ENV PATH=/opt/rt6/local/bin:$PATH
+# Arguments for build-time variables
+ARG RT_VERSION
+ARG RT_PREFIX
+ARG RT_WEB_USER
+ARG RT_WEB_GROUP
+ARG RT_DB_USER
+ARG RT_DB_PASSWORD
+ARG RT_DB_NAME
+ARG RT_DB_HOST
 
-# 1. Pre-requisites
+# Set environment variables (optional)
+ENV RT_VERSION=${RT_VERSION}
+ENV RT_PREFIX=${RT_PREFIX}
+ENV RT_WEB_USER=${RT_WEB_USER}
+ENV RT_WEB_GROUP=${RT_WEB_GROUP}
+
+# Install dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential gcc g++ make autoconf \
+    build-essential curl gcc g++ make autoconf \
     perl libperl-dev cpanminus \
-    apache2 libapache2-mod-fcgid \
+    libapache2-mod-fcgid apache2 \
     libdbd-pg-perl libdbi-perl \
     libssl-dev libexpat1-dev libgd-dev libz-dev \
-    patch tar graphviz w3m multiwatch openssl gnupg \
+    patch tar graphviz w3m multiwatch gnupg \
     && rm -rf /var/lib/apt/lists/*
 
+# Download and extract RT
+RUN mkdir -p /tmp/rt \
+    && curl -L https://download.bestpractical.com/pub/rt/release/rt-${RT_VERSION}.tar.gz -o /tmp/rt/rt.tar.gz \
+    && tar xzvf /tmp/rt/rt.tar.gz --strip-components=1 -C /tmp/rt \
+    && rm /tmp/rt/rt.tar.gz
 
-# 2. RT 6.0.2
-WORKDIR /opt/rt6
-RUN curl -L https://download.bestpractical.com/pub/rt/release/rt-6.0.2.tar.gz -o rt.tar.gz \
-    && tar xzvf rt.tar.gz --strip-components=1 \
-    && rm rt.tar.gz
-
-# 3. Configure RT
+# Configure and install RT
+WORKDIR /tmp/rt
 RUN ./configure \
-      --with-web-user=www-data \
-      --with-web-group=www-data \
-      --with-db-type=Pg \
-      --prefix=/opt/rt6 \
-      --with-attachment-dir=/opt/rt6/var/attachments \
-      --enable-graphviz \
-      --enable-gd
-
-# 4. Make dirs, install Perl dependencies and RT
-RUN make dirs \
-    && make fixdeps RT_FIX_DEPS_CMD="cpanm --notest --local-lib-contained=/opt/rt6/local" \
+        --prefix=${RT_PREFIX} \
+        --with-web-user=${RT_WEB_USER} \
+        --with-web-group=${RT_WEB_GROUP} \
+        --with-db-type=Pg \
+        --with-attachment-dir=${RT_PREFIX}/var/attachments \
+    && make dirs \
+    && make fixdeps RT_FIX_DEPS_CMD="cpanm --notest --local-lib-contained=${RT_PREFIX}/local" \
     && make install
 
-# 5. Copy RT_SiteConfig template
-COPY RT_SiteConfig.pm /opt/rt6/etc/RT_SiteConfig.pm
+# Cleanup
+RUN rm -rf /tmp/rt
 
-# 6. Inject .env values into RT_SiteConfig.pm at runtime
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Expose default port
+EXPOSE 5000
 
-EXPOSE 80
-
-ENTRYPOINT ["/entrypoint.sh"]
+# Default command to run RT server
+CMD ["sh", "-c", "${RT_PREFIX}/sbin/rt-server --port 5000"]
