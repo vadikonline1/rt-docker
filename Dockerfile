@@ -1,61 +1,59 @@
-FROM debian:bookworm-slim
+# Folosim Rocky Linux 9 ca bază
+FROM rockylinux:9
 
-LABEL maintainer="vadikonline <you@example.com>"
-ENV DEBIAN_FRONTEND=noninteractive
+# Setăm variabile de mediu
+ENV RT_VERSION=6.0.2
+ENV RT_PREFIX=/opt/rt6
+ENV RT_USER=rt
+ENV RT_GROUP=rt
+ENV PERL_LOCAL_LIB=$RT_PREFIX/local
 
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    perl \
-    curl \
-    cpanminus \
-    libssl-dev \
-    libexpat1-dev \
-    libgd-dev \
-    libpq-dev \
-    libgpg-error-dev \
-    libicu-dev \
-    zlib1g-dev \
-    libxml2-dev \
-    libpcre3-dev \
-    libyaml-dev \
-    libwww-perl \
-    libdbi-perl \
-    libdbd-pg-perl \
-    libtext-template-perl \
-    libmime-tools-perl \
-    libhtml-mason-perl \
-    libplack-perl \
-    libapache-session-perl \
-    libdatetime-perl \
-    && rm -rf /var/lib/apt/lists/*
+# Instalăm pachete de bază și dependințe Perl
+RUN dnf -y update && dnf install -y \
+    epel-release \
+    patch tar which gcc gcc-c++ make perl perl-App-cpanminus \
+    graphviz expat-devel gd-devel multiwatch openssl openssl-devel \
+    w3m curl bzip2 bzip2-devel xz-devel libuuid-devel \
+    postgresql-devel libicu-devel libxml2-devel zlib-devel \
+    sudo && \
+    dnf clean all
 
+# Dezactivare SELinux temporar
+RUN setenforce 0 || true
 
-WORKDIR /opt/rt6
+# Creăm user și grup RT
+RUN groupadd --system $RT_GROUP && \
+    useradd --system --gid $RT_GROUP --home-dir $RT_PREFIX $RT_USER && \
+    mkdir -p $RT_PREFIX && \
+    chown -R $RT_USER:$RT_GROUP $RT_PREFIX
 
-# Descărcare și instalare RT
-RUN curl -L https://download.bestpractical.com/pub/rt/release/rt-6.0.2.tar.gz -o rt.tar.gz \
-    && tar xzvf rt.tar.gz --strip-components=1 \
-    && rm rt.tar.gz \
-    && ./configure \
-        --with-web-user=www-data \
-        --with-web-group=www-data \
+WORKDIR $RT_PREFIX
+
+# Descărcăm și instalăm RT
+USER $RT_USER
+RUN curl -L https://download.bestpractical.com/pub/rt/release/rt-${RT_VERSION}.tar.gz -o rt.tar.gz && \
+    tar xzvf rt.tar.gz --strip-components=1 && \
+    rm rt.tar.gz && \
+    ./configure \
+        --prefix=$RT_PREFIX \
         --with-db-type=Pg \
-        --prefix=/opt/rt6 \
-        --with-attachment-dir=/opt/rt6/var/attachments \
-    && make dirs \
-    && make fixdeps RT_FIX_DEPS_CMD="cpanm --notest --local-lib-contained=/opt/rt6/local" \
-    && make install
+        --with-web-user=$RT_USER \
+        --with-web-group=$RT_GROUP \
+        --with-attachment-store=disk \
+        --enable-externalauth \
+        --enable-gd \
+        --enable-graphviz \
+        --enable-gpg \
+        --enable-smime && \
+    make dirs && \
+    make fixdeps RT_FIX_DEPS_CMD="cpanm --notest --local-lib-contained=$PERL_LOCAL_LIB" && \
+    make install
 
-# Copiere configurări și entrypoint
-COPY RT_SiteConfig.pm /opt/rt6/etc/RT_SiteConfig.pm
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Setăm permisiuni
+RUN sudo make fixperms
 
-RUN make fixperms \
-    && a2enmod fcgid rewrite mpm_prefork \
-    && mkdir -p /var/run/apache2
-
+# Expunem portul 80 pentru RT
 EXPOSE 80
-VOLUME ["/opt/rt6/var", "/var/log/apache2"]
 
-ENTRYPOINT ["/entrypoint.sh"]
+# Comanda implicită
+CMD ["/opt/rt6/sbin/rt-server", "--port", "80"]
